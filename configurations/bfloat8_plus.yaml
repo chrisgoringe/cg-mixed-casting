@@ -1,0 +1,5 @@
+default: float8_e4m3fnuz
+casts:
+  - layers: 0-2, 18
+    blocks: 
+    castto: none

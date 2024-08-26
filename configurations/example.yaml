@@ -1,0 +1,110 @@
+#####  Supported Cast Types
+#
+# What can you cast to? The following are supported:
+#
+# Full accuracy (FLUX default):
+# - bfloat16
+#
+# Torch 8 bit floats. In my testing float8_e4m3fnuz has been the best of these.
+# - float8_e4m3fnuz, float8_e4m3fn, float8_e5m2fnuz, float8_e5m2
+#
+# GGUF quantised casts. 
+# These have a higher quality to size ratio than the torch 8 bits, but run more slowly.
+# - Q8_0  (8 bits - same size as the float8 casts, considerably more accurate, but slower)
+# - Q5_1  (5 bits - generally still slightly better than float8)
+# - Q4_1  (4 bits - generally slightly worse than float8)
+#
+#####
+
+#####
+#
+# 1. Choose a default cast type and set it here. Start with float8_e4m3fnuz for speed or Q8_0 for accuracy.
+default: float8_e4m3fnuz
+#
+#####
+
+#####
+#
+# 2. Specify what blocks should be cast differently
+casts:
+#
+# Each entry below consists of three lines: layers, blocks, and castto
+#
+# layers can be defined by (see below for the meanings)
+# - a number
+# - a range (x-y) which is inclusive
+# - a comma separated list of numbers and ranges
+# - 'all', 'single', or 'double'
+#
+# blocks only applies to the double layers (layers 0-18), and can be 'img', 'txt', or left blank
+#
+# castto is one of the cast types, or 'default', or 'none' (meaning do not cast)
+#
+# The table is read from top to bottom, and the first match is applied.
+#
+#                                 What are the layers?
+# 
+# Flux consists of 57 transformer layers (numbered 0-56).
+# The first 19 (0-18) are 'double' layers - they have separate transformers for 'img' and 'txt'
+# The remaining 38 (19-56) are 'single' layers - the image and text streams get merged after layer 18
+# 
+# Errors introduced by approximating have a different impact depending on where they happen. In particular, 
+# my testing has suggested:
+#
+# Layer 18 is highly sensitive (probably because of the merge of streams after it).
+# Layers 0-2 are the next most sensitive.
+# So it makes sense to leave those four layers at full accuracy
+  - layers: 0-2, 18
+    blocks: 
+    castto: none
+#
+# From layer 3-17 the sensitivity is fairly flat, with txt blocks slightly more sensitive than img
+# So typically you leave all of them at your default
+
+# or you might make things a bit smaller by approximating the img blocks (uncomment these three lines)
+#  - layers: 3-17
+#    blocks: img
+#    castto: Q5_1
+
+# or you could make the txt blocks more accurate but slower
+#  - layers: 3-17
+#    blocks: txt
+#    castto: Q8_0
+
+# The single blocks are a lot less sensitive than the double blocks, so you might well
+# go for a significant memory saving
+  - layers: single
+    blocks: 
+    castto: Q4_1
+#
+# Play around, and look in the output console for output like this:
+#   1423467584 parameters cast to not cast
+#   2038984704 parameters cast to Q5_1
+#   3058477056 parameters cast to Q8_0
+#   5380478976 parameters cast to Q4_1
+# Quantization reduced model to 41.47% of size
+#
+#####
+
+
+
+#####
+# 
+# 3. Don't use these unless you're really wanting to experiment
+# 
+# There are a few extra transformations that by default are left 
+# at full accuracy. You can set a cast for them if you want.
+# The input layer
+# guidance_in:
+# img_in:
+# time_in:
+# txt_in:
+# vector_in:
+#
+# The final layer
+# final_layer:
+#
+# And the normalisations (leave this one. just leave it.)
+# norm:
+#
+#####

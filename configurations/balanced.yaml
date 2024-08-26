@@ -1,0 +1,14 @@
+default: Q8_0
+casts:
+  - layers: 0-2, 18
+    blocks: 
+    castto: none
+  - layers: 10-17
+    blocks: img
+    castto: Q5_1
+  - layers: 13-16
+    blocks: txt
+    castto: Q5_1
+  - layers: single
+    blocks:
+    castto: Q4_1

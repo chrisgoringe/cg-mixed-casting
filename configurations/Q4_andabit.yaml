@@ -1,0 +1,8 @@
+default: Q4_1
+casts:
+  - layers: 0-2, 18
+    blocks: 
+    castto: none
+  - layers: 3-17
+    blocks: txt
+    castto: Q5_1
