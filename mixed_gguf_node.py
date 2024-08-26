@@ -127,7 +127,10 @@ def mixed_gguf_sd_loader(path:str, metadata:dict = None):
         elif hasattr(GGMLQuantizationType, cast_to):
             qtype = getattr(GGMLQuantizationType, cast_to)
             if tnsr.dtype==torch.bfloat16: tnsr = tnsr.to(torch.float)
-            qt = quants.quantize(tnsr.numpy(), qtype=qtype)
+            try:
+                qt = quants.quantize(tnsr.numpy(), qtype=qtype)
+            except TypeError:
+                qt = quants.quantize(tnsr.to(torch.bfloat16).numpy(), qtype=qtype)
             sd[key] = QuantizedTensor( qt, tensor_shape=tnsr.shape, tensor_type=qtype )
             pass
         elif hasattr(torch, cast_to):
