@@ -1,0 +1,8 @@
+default: bnb8
+casts:
+  - layers: 0-2, 18
+    blocks: 
+    castto: none
+#  - layers: 12
+#    blocks:
+#    castto: bnb8

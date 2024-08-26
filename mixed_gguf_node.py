@@ -7,7 +7,10 @@ import folder_paths
 import comfy
 from tqdm import tqdm
 from functools import partial
-
+try:
+    import bitsandbytes
+except:
+    pass
 
 
 def layer_iteratable_from_string(s):
@@ -89,6 +92,8 @@ class LoadTracker:
 
         if type in ['bfloat16', 'float16']: return 16
         if type in ['float8_e4m3fn', 'float8_e4m3fnuz', 'float8_e5m2', 'float8_e5m2fnuz']: return 8
+        if type=='bnb8': return 8
+        if type=='bnb4': return 4
         if type=='Q8_0': return 8
         if type=='Q5_1': return 5
         if type=='Q4_1': return 4
@@ -119,6 +124,7 @@ def mixed_gguf_sd_loader(path:str, metadata:dict = None):
     data:dict[str, torch.Tensor] = load_file(path)
     keys = [key for key in data]
     sd = {}
+    bnb = {'bnb4':[], 'bnb8':[]}
     for key in tqdm(keys, desc="Quantising"):
         tnsr = data.pop(key)
         cast_to = castings.getcast(key)
@@ -132,10 +138,13 @@ def mixed_gguf_sd_loader(path:str, metadata:dict = None):
             pass
         elif hasattr(torch, cast_to):
             sd[key] = tnsr.to(getattr(torch, cast_to))
+        elif cast_to in bnb:
+            sd[key] = tnsr
+            bnb[cast_to].append(key)
         else:
             raise NotImplementedError(cast_to)
         LoadTracker.instance().track(cast_to or "not cast", tnsr.shape)
-    return sd
+    return sd, bnb
 
 def load_config(config_filepath):
     if os.path.splitext(config_filepath)[1]==".yaml":
@@ -175,12 +184,35 @@ class MixedGGUFLoader:
         path = folder_paths.get_full_path("unet", unet_name)
         config = load_config(fullpathfor('configurations',casting))
         
-        sd = mixed_gguf_sd_loader(path, metadata=config)
+        sd, bnb = mixed_gguf_sd_loader(path, metadata=config)
 
         model = comfy.sd.load_diffusion_model_state_dict(
             sd, model_options={"custom_operations": ops}
         )
         mfac =  LoadTracker.instance().total_bits(16) / LoadTracker.instance().unreduced_bits(16)
+
+        def apply_bnb(model, key, clazz):
+            bits = key.split(".")
+            if (bits[-1]!='weight'): return
+            parent = model.model.diffusion_model
+            for b in bits[:-2]: parent = getattr(parent, b)
+            child_name = bits[-2]
+            child = getattr(parent, child_name)
+            weight = getattr(child, 'weight')
+            bias = getattr(child, 'bias', None)
+            sd = { "weight": weight }
+            if bias is not None: sd["bias"] = bias
+            setattr(parent, child_name, clazz( weight.shape[1], weight.shape[0], bias=(bias is not None)))
+            getattr(parent, child_name).load_state_dict(sd)
+            parent.cuda()
+            parent.cpu()
+            del child, weight, bias, sd
+
+        if bnb['bnb8']:
+            for k in tqdm(bnb['bnb8'], desc="bitsandbytes 8"): apply_bnb(model, k, bitsandbytes.nn.Linear8bitLt)
+        if bnb['bnb4']:
+            for k in tqdm(bnb['bnb4'], desc="bitsandbytes 4"): apply_bnb(model, k, bitsandbytes.nn.Linear4bit)
+
         logging.info(LoadTracker.instance().cast_summary())
         logging.info('Quantization reduced model to {:>5.2f}% of size'.format(100*mfac))
         model = GGUFModelPatcher.clone(model)
