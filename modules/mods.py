@@ -2,56 +2,10 @@
 import torch
 
 from .dequant import dequantize_tensor
+from .qtensor import QuantizedTensor
 from gguf import GGMLQuantizationType
-from functools import partial
 import comfy
 import copy
-
-class QuantizedTensor():
-    def __init__(self, data=None, tensor_type=None, tensor_shape=None, patches=[], **kwargs):
-        self.tensor_type:GGMLQuantizationType = tensor_type
-        self.tensor_shape:torch.Size          = tensor_shape
-        self.patches:list                     = patches.copy()
-        self._tensor:torch.Tensor             = None
-        self._set_data(data)
-
-    def _set_data(self, data):
-        self._tensor = data if isinstance(data, torch.Tensor) or data is None else torch.as_tensor(data)  
-        
-    @classmethod
-    def __torch_function__(cls, func, types, args=(), kwargs=None):
-        kwargs = kwargs or {}
-        for a in args:
-            if isinstance(a, QuantizedTensor):
-                return_qt = QuantizedTensor(None, a.tensor_type, a.tensor_shape, a.patches)
-                break
-
-        args = [getattr(a, '_tensor', a) for a in args]
-        return_qt._set_data( func(*args, **kwargs) )
-        return return_qt
-    
-    def wrap(self, fn, *args, **kwargs):
-        x = fn(*args, **kwargs)
-        return QuantizedTensor(x, self.tensor_type, self.tensor_shape, self.patches) if isinstance(x, torch.Tensor) else x
-    
-    def __getattr__(self, __name: str):
-        if __name=='patches':
-            pass
-        a = getattr(self._tensor, __name)
-        return partial(self.wrap, a) if hasattr(a,'__call__') else a
-    
-    #def requires_grad_(self, *args, **kwargs):
-    #    self._tensor.requires_grad_(*args, **kwargs)
-    #    return self
-
-    #def detach(self, *args, **kwargs):
-    #    self._tensor.detach(*args, **kwargs)
-    #    return self
-    
-    #def to(self, *args, **kwargs):
-    #    self._tensor = self._tensor.to(*args, **kwargs)
-    #    return self
-
 
 class GGMLLayer(torch.nn.Module):
     """
@@ -59,6 +13,11 @@ class GGMLLayer(torch.nn.Module):
     """
     dequant_dtype = None
     patch_dtype = None
+
+    FAKE_SD        = 0
+    QUANTIZED_SD   = 1
+    DEQUANTIZED_SD = 2
+    return_sd_mode = FAKE_SD
 
     def __init__(self, *args, **kwargs):
         super().__init__()
@@ -72,24 +31,34 @@ class GGMLLayer(torch.nn.Module):
             elif k[len(prefix):] == "bias":
                 self.bias = v
             else:
-                missing_keys.append(k)
+                unexpected_keys.append(k)
 
     def _save_to_state_dict(self, destination, prefix, keep_vars):
-        # This is a fake state dict for vram estimation
-        if self.weight is not None:
-            weight = torch.zeros_like(self.weight, device=torch.device("meta"))
-            destination[f"{prefix}weight"] = weight
-        if self.bias is not None:
-            bias = torch.zeros_like(self.bias, device=torch.device("meta"))
-            destination[f"{prefix}bias"] = bias
-        return
+        if self.return_sd_mode == self.DEQUANTIZED_SD:
+            weight, bias = self.get_weights()
+            if weight is not None: destination[f"{prefix}weight"] = weight
+            if bias is not None:   destination[f"{prefix}bias"] = bias
+        elif self.return_sd_mode == self.FAKE_SD:
+            if self.weight is not None:
+                weight = torch.zeros_like(self.weight, device=torch.device("meta"))
+                destination[f"{prefix}weight"] = weight
+            if self.bias is not None:
+                bias = torch.zeros_like(self.bias, device=torch.device("meta"))
+                destination[f"{prefix}bias"] = bias
+            return
+        elif self.return_sd_mode == self.QUANTIZED_SD:
+            if isinstance(self.weight, QuantizedTensor):
+                destination[f"{prefix}weight_tensor_description"] = self.weight.tensor_description
+                destination[f"{prefix}weight"] = self.weight._tensor
+                if self.bias is not None: 
+                    destination[f"{prefix}bias_tensor_description"] = self.bias.tensor_description
+                    destination[f"{prefix}bias"] = self.bias._tensor
+            else:
+                if self.weight is not None: destination[f"{prefix}weight"] = self.weight
+                if self.bias is not None:   destination[f"{prefix}bias"] = self.bias
 
-        # This would return the actual state dict
-        weight, bias = self.get_weights()
-        if weight is not None:
-            destination[f"{prefix}weight"] = weight
-        if bias is not None:
-            destination[f"{prefix}bias"] = weight
+        else:
+            raise NotImplementedError(f"{self.return_sd_mode} not known")
 
     def _apply(self, fn):
         if self.weight is not None:

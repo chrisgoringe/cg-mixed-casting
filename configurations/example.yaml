@@ -1,3 +1,21 @@
+#####
+#
+# How to make your own configuration.
+# Make a copy of this file and save it in the configurations directory.
+# Edit it as described below.
+# Restart Comfy, and the new configuration should appear in the node menu.
+#
+#####
+
+#####
+#
+# How to edit...
+#
+# 1. Choose a default cast type and set it here. Start with float8_e4m3fnuz for speed or Q8_0 for accuracy.
+default: float8_e4m3fnuz
+#
+#####
+
 #####  Supported Cast Types
 #
 # What can you cast to? The following are supported:
@@ -13,13 +31,6 @@
 # - Q8_0  (8 bits - same size as the float8 casts, considerably more accurate, but slower)
 # - Q5_1  (5 bits - generally still slightly better than float8)
 # - Q4_1  (4 bits - generally slightly worse than float8)
-#
-#####
-
-#####
-#
-# 1. Choose a default cast type and set it here. Start with float8_e4m3fnuz for speed or Q8_0 for accuracy.
-default: float8_e4m3fnuz
 #
 #####
 
@@ -53,7 +64,7 @@ casts:
 #
 # Layer 18 is highly sensitive (probably because of the merge of streams after it).
 # Layers 0-2 are the next most sensitive.
-# So it makes sense to leave those four layers at full accuracy
+# So it makes sense to leave those four layers at full accuracy. You do that like this:
   - layers: 0-2, 18
     blocks: 
     castto: none
@@ -77,7 +88,7 @@ casts:
     blocks: 
     castto: Q4_1
 #
-# Play around, and look in the output console for output like this:
+# Play around, and look in the output console for output like this to get an idea of the size 
 #   1423467584 parameters cast to not cast
 #   2038984704 parameters cast to Q5_1
 #   3058477056 parameters cast to Q8_0
@@ -92,19 +103,17 @@ casts:
 # 
 # 3. Don't use these unless you're really wanting to experiment
 # 
-# There are a few extra transformations that by default are left 
-# at full accuracy. You can set a cast for them if you want.
-# The input layer
+# There are a few extra transformations that are left 
+# at full accuracy (ie they ignore your default setting). 
+# You can set a cast for them if you really want to.
+# Be aware that some of these will not support all quantizations.
+#
 # guidance_in:
 # img_in:
 # time_in:
 # txt_in:
 # vector_in:
-#
-# The final layer
 # final_layer:
-#
-# And the normalisations (leave this one. just leave it.)
 # norm:
 #
 #####

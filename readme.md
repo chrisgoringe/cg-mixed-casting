@@ -14,15 +14,32 @@ be made smaller.
 
 By default some parts of the model are always left in full precision (input layer, final layer, normalisations).
 
-## How to use it
+## Install or update
 
-Install by doing `git clone https://github.com/ChrisGoringe/cg-mixed-casting` in your custom nodes directory.
+To install:
 
-You'll find the loader node under `advanced/loaders`.
+``` 
+cd [your comfy directory]/custom_nodes
+git clone https://github.com/ChrisGoringe/cg-mixed-casting
+```
 
-![node](docs/caster.png)
+To update:
 
-Select the model, and the casting scheme (see below), and use it. Yes, it works with LoRAs (thanks again to city96's code!).
+```
+cd [your comfy directory]/custom_nodes/cg-mixed-casting
+git pull
+```
+
+## Loading and casting a model
+
+You'll find the loader node under `advanced/loaders`. 
+
+![node](docs/loader.png)
+
+Select the model you want to load, and the casting scheme (see below),
+and use it. Yes, it works with LoRAs (thanks again to city96's code!).
+
+Ignore `recast` for the time being!
 
 ## Casting scheme
 
@@ -33,8 +50,46 @@ They live in the `configurations` subdirectory of the custom node's folder. Ther
 - `Q4_andabit` uses `Q4_1` except for the same four layers, again, they are left at full precision
 - `balanced` uses `Q4_1`, `Q5_1`, `Q8_0` and full precision
 
-There is also `example.yaml` which has very detailed instructions on how to make your own!
+There is also `example.yaml` which has very detailed instructions on how to make your own. 
+
+## Saving
+
+If you find a configuration you like, you can save the mixed version of the file using the saver node, 
+found under 'advanced/savers'
+
+![saver](docs/saver.png)
+
+Just give it a name, and it will be saved in the output directory. Move it to your `unet` directory, and
+restart comfy, and it will appear in the loader node (just like new checkpoints).
+
+*Note that this does _not_ save LoRAs etc. that have been applied*
+
+## Loading a premix
+
+To load a premix and use it without applying any more casts, just select `[none]` for the casting. 
+
+![reload](docs/reload.png)
+
+Note that the reported size of the model (in the console log) may be incorrect when reloading [bug #10](https://github.com/chrisgoringe/cg-mixed-casting/issues/10). This is provided for information only, so won't impact use.
+
+## Recasting a premix
+
+This is experimental, and there are lots of good reasons not to do it!
+
+If you select a configuration file, you can use `recast` to decide what happens when a block that
+has already been cast (in the premix) has a casting intruction in the configuration file. 
+
+The default (recast set to `no`) is to ignore the configuration file for any blocks that have already been cast.
+
+- if the premix has torch casts (like `float8_e4m3fnuz`), they will be recast regardless of the recast setting (this is [bug #9](https://github.com/chrisgoringe/cg-mixed-casting/issues/9))
+
+If you set recast to `yes`, the blocks will be recast into the new format. However:
+
+- it makes no sense to use this to recast to a more accurate format - the data has already been approximated
+- recasting to a smaller format is less accurate than starting again (`full -> Q8_0 -> Q4_1` is worse than `full -> Q4_1`)
 
 ## Enjoy!
 
 And if you come up with a good casting scheme, let everyone know!
+
+[.](https://huggingface.co/city96/FLUX.1-dev-gguf/tree/main)
