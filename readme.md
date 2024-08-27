@@ -34,12 +34,11 @@ git pull
 
 You'll find the loader node under `advanced/loaders`. 
 
-![node](docs/loader.png)
+![node](docs/usage.png)
 
-Select the model you want to load, and the casting scheme (see below),
-and use it. Yes, it works with LoRAs (thanks again to city96's code!).
-
-Ignore `recast` for the time being!
+- `model` The base FLUX model (one of so-called unet only ones)
+- `casting` The casting scheme. See below for details.
+- `optional_gguf_model` The pre-quantised GGUF model that you are patching from, if any
 
 ## Casting scheme
 
@@ -52,44 +51,32 @@ They live in the `configurations` subdirectory of the custom node's folder. Ther
 
 There is also `example.yaml` which has very detailed instructions on how to make your own. 
 
+## Patching
+
+If you want to use a quantisation that isn't supported, you can do so by patching. This copies GGUF quantised
+blocks from another model. It really should be a quantised version of the same model, like the the Flux
+ones [here](https://huggingface.co/city96/FLUX.1-dev-gguf/tree/main).
+
+Put the model in your unet directory, and select it in the `optional_gguf_file`. Then use the keyword `patch` in
+the configuration file to use the block from the optional model.
+
+See `patch_singles.yaml` for an example.
+
 ## Saving
 
 If you find a configuration you like, you can save the mixed version of the file using the saver node, 
-found under 'advanced/savers'
-
-![saver](docs/saver.png)
+found under 'advanced/savers'.
 
 Just give it a name, and it will be saved in the output directory. Move it to your `unet` directory, and
-restart comfy, and it will appear in the loader node (just like new checkpoints).
+restart comfy server (and reload webpage), and it will appear in the loader node.
 
 *Note that this does _not_ save LoRAs etc. that have been applied*
 
 ## Loading a premix
 
-To load a premix and use it without applying any more casts, just select `[none]` for the casting. 
-
-![reload](docs/reload.png)
-
-Note that the reported size of the model (in the console log) may be incorrect when reloading [bug #10](https://github.com/chrisgoringe/cg-mixed-casting/issues/10). This is provided for information only, so won't impact use.
-
-## Recasting a premix
-
-This is experimental, and there are lots of good reasons not to do it!
-
-If you select a configuration file, you can use `recast` to decide what happens when a block that
-has already been cast (in the premix) has a casting intruction in the configuration file. 
-
-The default (recast set to `no`) is to ignore the configuration file for any blocks that have already been cast.
-
-- if the premix has torch casts (like `float8_e4m3fnuz`), they will be recast regardless of the recast setting (this is [bug #9](https://github.com/chrisgoringe/cg-mixed-casting/issues/9))
-
-If you set recast to `yes`, the blocks will be recast into the new format. However:
-
-- it makes no sense to use this to recast to a more accurate format - the data has already been approximated
-- recasting to a smaller format is less accurate than starting again (`full -> Q8_0 -> Q4_1` is worse than `full -> Q4_1`)
+To load a premix just select it. The configuration file will be ignored.
 
 ## Enjoy!
 
 And if you come up with a good casting scheme, let everyone know!
 
-[.](https://huggingface.co/city96/FLUX.1-dev-gguf/tree/main)

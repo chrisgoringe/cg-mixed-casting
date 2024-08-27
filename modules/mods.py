@@ -17,6 +17,7 @@ class GGMLLayer(torch.nn.Module):
     FAKE_SD        = 0
     QUANTIZED_SD   = 1
     DEQUANTIZED_SD = 2
+    FAKE_DEQUANTIZED_SD = 3
     return_sd_mode = FAKE_SD
 
     def __init__(self, *args, **kwargs):
@@ -34,10 +35,12 @@ class GGMLLayer(torch.nn.Module):
                 unexpected_keys.append(k)
 
     def _save_to_state_dict(self, destination, prefix, keep_vars):
+
         if self.return_sd_mode == self.DEQUANTIZED_SD:
             weight, bias = self.get_weights()
             if weight is not None: destination[f"{prefix}weight"] = weight
             if bias is not None:   destination[f"{prefix}bias"] = bias
+
         elif self.return_sd_mode == self.FAKE_SD:
             if self.weight is not None:
                 weight = torch.zeros_like(self.weight, device=torch.device("meta"))
@@ -45,9 +48,9 @@ class GGMLLayer(torch.nn.Module):
             if self.bias is not None:
                 bias = torch.zeros_like(self.bias, device=torch.device("meta"))
                 destination[f"{prefix}bias"] = bias
-            return
+
         elif self.return_sd_mode == self.QUANTIZED_SD:
-            if isinstance(self.weight, QuantizedTensor):
+            if self.weight is not None and isinstance(self.weight, QuantizedTensor):
                 destination[f"{prefix}weight_tensor_description"] = self.weight.tensor_description
                 destination[f"{prefix}weight"] = self.weight._tensor
                 if self.bias is not None: 
@@ -56,6 +59,21 @@ class GGMLLayer(torch.nn.Module):
             else:
                 if self.weight is not None: destination[f"{prefix}weight"] = self.weight
                 if self.bias is not None:   destination[f"{prefix}bias"] = self.bias
+
+        elif self.return_sd_mode == self.FAKE_DEQUANTIZED_SD:
+            if self.weight is not None and isinstance(self.weight, QuantizedTensor):
+                weight = torch.zeros(self.weight.tensor_shape, dtype=torch.bfloat16, device=torch.device("meta"))
+                destination[f"{prefix}weight"] = weight
+                if self.bias is not None:
+                    bias = torch.zeros(self.bias.tensor_shape, dtype=torch.bfloat16, device=torch.device("meta"))
+                    destination[f"{prefix}bias"] = bias
+            else:
+                if self.weight is not None:
+                    weight = torch.zeros_like(self.weight, device=torch.device("meta"))
+                    destination[f"{prefix}weight"] = weight
+                if self.bias is not None:
+                    bias = torch.zeros_like(self.bias, device=torch.device("meta"))
+                    destination[f"{prefix}bias"] = bias
 
         else:
             raise NotImplementedError(f"{self.return_sd_mode} not known")

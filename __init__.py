@@ -5,4 +5,4 @@ NODE_CLASS_MAPPINGS = {
     "Mixed Cast Flux Saver"  : MixedGGUFSaver
 } 
 
-VERSION = "0.2"
+VERSION = "0.3"

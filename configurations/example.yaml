@@ -49,7 +49,10 @@ casts:
 #
 # blocks only applies to the double layers (layers 0-18), and can be 'img', 'txt', or left blank
 #
-# castto is one of the cast types, or 'default', or 'none' (meaning do not cast)
+# castto is one of the cast types, or one of the special values
+# 'default' (use the default defined above)
+# 'none'    (do not cast)
+# 'patch'   (copy the block from the optional prequantized model)
 #
 # The table is read from top to bottom, and the first match is applied.
 #
@@ -89,11 +92,7 @@ casts:
     castto: Q4_1
 #
 # Play around, and look in the output console for output like this to get an idea of the size 
-#   1423467584 parameters cast to not cast
-#   2038984704 parameters cast to Q5_1
-#   3058477056 parameters cast to Q8_0
-#   5380478976 parameters cast to Q4_1
-# Quantization reduced model to 41.47% of size
+# Full model size  23802816640, now  10988604928 - reduced to 46.17%
 #
 #####
 
