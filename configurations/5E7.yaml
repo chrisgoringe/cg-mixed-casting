@@ -1,0 +1,11 @@
+default: Q4_1
+casts:
+  - layers: 0-1
+    blocks: 
+    castto: none
+  - layers: 2,4-15,18,51-54
+    blocks:
+    castto: Q5_1
+  - layers: 3,16-17,19-50,55-56
+    blocks:
+    castto: Q4_0

@@ -108,7 +108,8 @@ class MixedGGUFLoader:
     @classmethod
     def IS_CHANGED(cls, casting, **kwargs):
         config = load_config(fullpathfor('configurations',casting))
-        return json.dumps({"config":config})        
+        for k in kwargs: config[k] = kwargs[k]
+        return json.dumps(config)        
 
     def func(self, model, casting, optional_gguf_file=None):
         ops = GGMLOps()
