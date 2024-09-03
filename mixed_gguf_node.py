@@ -39,10 +39,7 @@ def mixed_gguf_sd_loader(path:str, config:dict=None, gguf_file:str=None):
             elif ttype:=getattr(torch, cast_to, None): 
                 sd[key] = tnsr.to(ttype)
             elif qtype:=getattr(GGMLQuantizationType, cast_to, None):
-                #try:              qt = quants.quantize(tnsr.numpy(), qtype=qtype)
-                #except TypeError: qt = quants.quantize(tnsr.to(torch.float).numpy(), qtype=qtype)
-                sd[key] = QuantizedTensor( tnsr, tensor_shape=tnsr.shape, tensor_type=qtype, data_is_unquantized_tensor=True )
-
+                sd[key] = QuantizedTensor.from_unquantized_tensor( tnsr, tensor_type=qtype )
             else: 
                 raise NotImplementedError(cast_to)
             

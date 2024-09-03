@@ -14,7 +14,7 @@ class QuantizedTensor():
         self._tensor:torch.Tensor             = None
         self._set_data(data, data_is_unquantized_tensor)
 
-    def dequantized(self, dtype, dequant_dtype=None):
+    def dequantized(self, dtype, dequant_dtype=None) -> torch.Tensor:
         return dequantize_tensor(self._tensor, dtype, dequant_dtype)
 
     @property
@@ -32,6 +32,10 @@ class QuantizedTensor():
     def load_from_reader_tensor(cls, reader_tensor:ReaderTensor):
         return QuantizedTensor( data=reader_tensor.data, tensor_type=reader_tensor.tensor_type, tensor_shape=torch.Size(np.flip(list(reader_tensor.shape))))
 
+    @classmethod
+    def from_unquantized_tensor(cls, tnsr:torch.Tensor, tensor_type:GGMLQuantizationType):
+        return QuantizedTensor( tnsr, tensor_shape=tnsr.shape, tensor_type=tensor_type, data_is_unquantized_tensor=True )
+    
     def _set_data(self, data, data_is_unquantized_tensor=False):
         if data_is_unquantized_tensor:
             assert isinstance(data, torch.Tensor)
