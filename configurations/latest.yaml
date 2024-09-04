@@ -1,0 +1,8 @@
+default: patch:flux1-dev-Q5_K_S.gguf
+casts:
+  - layers: 0-4, 6-7, 10, 12
+    castto: none
+  - layers: 5, 8-9, 11, 13, 14-21, 50-54
+    castto: patch:flux1-dev-Q6_K.gguf
+  - layers: 56
+    castto: Q4_1

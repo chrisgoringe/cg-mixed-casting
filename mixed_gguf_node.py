@@ -14,7 +14,7 @@ if "unet_gguf" not in folder_paths.folder_names_and_paths:
     orig = folder_paths.folder_names_and_paths.get("diffusion_models", folder_paths.folder_names_and_paths.get("unet", [[], set()]))
     folder_paths.folder_names_and_paths["unet_gguf"] = (orig[0], {".gguf"})
 
-def mixed_gguf_sd_loader(path:str, config:dict=None, gguf_file:str=None):
+def mixed_gguf_sd_loader(path:str, config:dict=None, gguf_file:str=None, gguf_folder:str=None):
     data:dict[str, torch.Tensor] = load_file(path)
     castings = Castings( config )
 
@@ -34,8 +34,8 @@ def mixed_gguf_sd_loader(path:str, config:dict=None, gguf_file:str=None):
             cast_to = castings.getcast(key) 
             if cast_to is None:      
                 sd[key] = tnsr
-            elif cast_to == 'patch':
-                topatch.append(key)
+            elif cast_to.startswith('patch'):
+                topatch.append((key, cast_to))
             elif ttype:=getattr(torch, cast_to, None): 
                 sd[key] = tnsr.to(ttype)
             elif qtype:=getattr(GGMLQuantizationType, cast_to, None):
@@ -43,19 +43,34 @@ def mixed_gguf_sd_loader(path:str, config:dict=None, gguf_file:str=None):
             else: 
                 raise NotImplementedError(cast_to)
             
-    return apply_patches(sd, gguf_file, topatch)
+    return apply_patches(sd, gguf_file, gguf_folder, topatch)
 
-def apply_patches(sd, gguf_file, topatch:list[str]):
+def apply_patches(sd, gguf_file, gguf_folder, topatch:list[tuple[str,str]]):
     if topatch: 
-        if gguf_file == MixedGGUFLoader.CHOOSE_NONE:
-            raise Exception("patch used in configuration but no gguf file selected")
-        reader = GGUFReader(folder_paths.get_full_path("unet", gguf_file))
-        for tensor in reader.tensors:
-            if (key := str(tensor.name)) in topatch:
-                sd[key] = QuantizedTensor.load_from_reader_tensor(tensor)
-                topatch.remove(key)
-    if topatch:
-        raise Exception(f"Failed to patch {topatch}")
+        load_from_folder = [ cast[6:].strip() for key, cast in topatch if cast.startswith('patch:') ]
+        assert len(load_from_folder) == len(topatch) or len(load_from_folder) == 0
+        if len(load_from_folder) == 0:
+            if gguf_file == MixedGGUFLoader.CHOOSE_NONE:
+                raise Exception("patch used in configuration but no gguf file selected")
+            reader = GGUFReader(folder_paths.get_full_path("unet", gguf_file))
+            topatch = [ key for key, cast in topatch ]
+            for tensor in reader.tensors:
+                if (key := str(tensor.name)) in topatch:
+                    sd[key] = QuantizedTensor.load_from_reader_tensor(tensor)
+                    topatch.remove(key)
+            if topatch:
+                raise Exception(f"Failed to patch {topatch}")
+        else:
+            for file in set(load_from_folder):
+                reader = GGUFReader(os.path.join(gguf_folder, file))
+                to_patch_this = [ key for key, cast in topatch if cast==f"patch:{file}"]
+                for tensor in reader.tensors:
+                    if (key := str(tensor.name)) in to_patch_this:
+                        sd[key] = QuantizedTensor.load_from_reader_tensor(tensor)
+                        to_patch_this.remove(key)
+                if to_patch_this:
+                    raise Exception(f"Failed to patch {to_patch_this}")
+
     return sd
 
 def load_config(config_filepath):
@@ -95,7 +110,10 @@ class MixedGGUFLoader:
                 "model": (unet_names,),
                 "casting": (casting_names,)
             },
-            "optional": { "optional_gguf_file": (gguf_names,), },
+            "optional": { 
+                "optional_gguf_file": (gguf_names,), 
+                "optional_gguf_folder": ("STRING",{"default":""}), 
+                },
         }
 
     RETURN_TYPES = ("MODEL",)
@@ -108,7 +126,7 @@ class MixedGGUFLoader:
         for k in kwargs: config[k] = kwargs[k]
         return json.dumps(config)        
 
-    def func(self, model, casting, optional_gguf_file=None):
+    def func(self, model, casting, optional_gguf_file=None, optional_gguf_folder=None):
         ops = GGMLOps()
         ops.Linear.dequant_dtype = None
         ops.Linear.patch_dtype = None
@@ -116,7 +134,7 @@ class MixedGGUFLoader:
         path = folder_paths.get_full_path("unet", model)
         config = load_config(fullpathfor('configurations',casting)) if casting!=MixedGGUFLoader.CHOOSE_NONE else None
         
-        sd = mixed_gguf_sd_loader(path, config=config, gguf_file=optional_gguf_file)
+        sd = mixed_gguf_sd_loader(path, config=config, gguf_file=optional_gguf_file, gguf_folder=optional_gguf_folder)
         model = comfy.sd.load_diffusion_model_state_dict( sd, model_options={"custom_operations": ops} )
         measure_model(model.model.diffusion_model)
         model = GGUFModelPatcher.clone(model)
